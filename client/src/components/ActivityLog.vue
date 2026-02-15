@@ -1,5 +1,6 @@
 <script setup>
 import { ref } from 'vue'
+import { timeAgo } from '../utils/timeAgo.js'
 
 const logs = ref([])
 const loading = ref(false)
@@ -30,12 +31,7 @@ async function fetchLogs() {
 }
 
 function formatTime(dateStr) {
-  return new Date(dateStr).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  return timeAgo(dateStr)
 }
 
 function toggle() {

@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import ActivityLog from './components/ActivityLog.vue'
+import { timeAgo } from './utils/timeAgo.js'
 
 const todos = ref([])
 const newTitle = ref('')
@@ -106,9 +107,7 @@ async function saveEdit(id) {
 }
 
 function formatDate(dateStr) {
-  return new Date(dateStr).toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit'
-  })
+  return timeAgo(dateStr)
 }
 
 onMounted(fetchTodos)
