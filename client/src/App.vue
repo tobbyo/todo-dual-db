@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import ActivityLog from './components/ActivityLog.vue'
 import { timeAgo, formatDueDate } from './utils/timeAgo.js'
 
@@ -18,6 +18,7 @@ const loading = ref(false)
 const searchQuery = ref('')
 const statusFilter = ref('all')
 const showCompleted = ref(false)
+const deletingTodo = ref(null)  // { id, title } when modal is open
 const sortBy = ref('createdAt')
 const sortDir = ref('desc')
 
@@ -124,8 +125,17 @@ async function toggleComplete(todo) {
   refreshActivityLog()
 }
 
-async function deleteTodo(id) {
-  await fetch(`${API}/${id}`, { method: 'DELETE' })
+function requestDelete(todo) {
+  deletingTodo.value = { id: todo.id, title: todo.title }
+}
+
+function cancelDelete() {
+  deletingTodo.value = null
+}
+
+async function confirmDelete() {
+  await fetch(`${API}/${deletingTodo.value.id}`, { method: 'DELETE' })
+  deletingTodo.value = null
   await fetchTodos()
   refreshActivityLog()
 }
@@ -170,7 +180,15 @@ const priorityBorderClasses = {
   Low: 'border-l-[3px] border-l-blue-400',
 }
 
-onMounted(fetchTodos)
+function onKeydown(e) {
+  if (e.key === 'Escape' && deletingTodo.value) cancelDelete()
+}
+
+onMounted(() => {
+  fetchTodos()
+  window.addEventListener('keydown', onKeydown)
+})
+onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
@@ -321,7 +339,7 @@ onMounted(fetchTodos)
                   </div>
                   <div class="flex gap-1 shrink-0">
                     <button @click="startEdit(todo)" class="px-2 py-1 text-xs text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors">Edit</button>
-                    <button @click="deleteTodo(todo.id)" class="px-2 py-1 text-xs text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors">Delete</button>
+                    <button @click="requestDelete(todo)" class="px-2 py-1 text-xs text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors">Delete</button>
                   </div>
                 </div>
 
@@ -382,7 +400,7 @@ onMounted(fetchTodos)
                     </div>
                     <div class="flex gap-1 shrink-0">
                       <button @click="startEdit(todo)" class="px-2 py-1 text-xs text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors">Edit</button>
-                      <button @click="deleteTodo(todo.id)" class="px-2 py-1 text-xs text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors">Delete</button>
+                      <button @click="requestDelete(todo)" class="px-2 py-1 text-xs text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors">Delete</button>
                     </div>
                   </div>
 
@@ -416,5 +434,34 @@ onMounted(fetchTodos)
 
       </div>
     </div>
+
+    <!-- Delete confirmation modal -->
+    <Teleport to="body">
+      <div
+        v-if="deletingTodo"
+        class="fixed inset-0 z-50 flex items-center justify-center"
+      >
+        <!-- Backdrop -->
+        <div class="absolute inset-0 bg-black/40" @click="cancelDelete" />
+
+        <!-- Dialog -->
+        <div class="relative bg-white rounded-lg shadow-xl border border-gray-200 p-6 w-full max-w-sm mx-4">
+          <h2 class="text-sm font-semibold text-gray-900 mb-1">Delete todo?</h2>
+          <p class="text-sm text-gray-500 mb-5">
+            "<span class="text-gray-700">{{ deletingTodo.title }}</span>" will be permanently removed.
+          </p>
+          <div class="flex justify-end gap-2">
+            <button
+              @click="cancelDelete"
+              class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+            >Cancel</button>
+            <button
+              @click="confirmDelete"
+              class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition-colors"
+            >Delete</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
