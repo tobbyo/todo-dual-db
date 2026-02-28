@@ -45,7 +45,7 @@ defineExpose({ fetchLogs })
 </script>
 
 <template>
-  <div class="bg-white rounded-lg shadow-sm border border-gray-200 mt-8">
+  <div class="bg-white rounded-lg shadow-sm border border-gray-200">
     <!-- Header / Toggle -->
     <button
       @click="toggle"
