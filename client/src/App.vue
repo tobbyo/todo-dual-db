@@ -17,6 +17,7 @@ const editPriority = ref(null)
 const loading = ref(false)
 const searchQuery = ref('')
 const statusFilter = ref('all')
+const priorityFilter = ref(null)  // null | 'Low' | 'Medium' | 'High'
 const showCompleted = ref(false)
 const deletingTodo = ref(null)  // { id, title } when modal is open
 const sortBy = ref('createdAt')
@@ -31,17 +32,38 @@ const sortOptions = [
   { value: 'dueDate', label: 'Due date' },
 ]
 
+function isOverdue(todo) {
+  if (!todo.dueDate || todo.isComplete) return false
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return new Date(todo.dueDate) < today
+}
+
 const statusCounts = computed(() => ({
   all: todos.value.length,
   active: todos.value.filter(t => !t.isComplete).length,
   completed: todos.value.filter(t => t.isComplete).length,
+  overdue: todos.value.filter(isOverdue).length,
 }))
+
+const filtersActive = computed(() =>
+  statusFilter.value !== 'all' || priorityFilter.value !== null || searchQuery.value.trim() !== ''
+)
+
+function clearFilters() {
+  statusFilter.value = 'all'
+  priorityFilter.value = null
+  searchQuery.value = ''
+}
 
 const sortedTodos = computed(() => {
   let result = todos.value
 
   if (statusFilter.value === 'active') result = result.filter(t => !t.isComplete)
   else if (statusFilter.value === 'completed') result = result.filter(t => t.isComplete)
+  else if (statusFilter.value === 'overdue') result = result.filter(isOverdue)
+
+  if (priorityFilter.value) result = result.filter(t => t.priority === priorityFilter.value)
 
   const q = searchQuery.value.trim().toLowerCase()
   if (q) result = result.filter(t =>
@@ -257,6 +279,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
           <!-- Controls: Search + Filter + Sort -->
           <div v-if="todos.length > 0" class="mb-5 space-y-2">
+            <!-- Search -->
             <div class="relative">
               <input
                 v-model="searchQuery"
@@ -274,20 +297,34 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               >✕</button>
             </div>
 
+            <!-- Status filter + sort -->
             <div class="flex items-center justify-between gap-2">
-              <div class="flex gap-1">
+              <div class="flex gap-1 flex-wrap">
                 <button
-                  v-for="opt in [{ value: 'all', label: 'All' }, { value: 'active', label: 'Active' }, { value: 'completed', label: 'Done' }]"
+                  v-for="opt in [
+                    { value: 'all', label: 'All' },
+                    { value: 'active', label: 'Active' },
+                    { value: 'completed', label: 'Done' },
+                    { value: 'overdue', label: 'Overdue', dot: true },
+                  ]"
                   :key="opt.value"
                   @click="statusFilter = opt.value"
-                  class="px-2.5 py-1 text-xs font-medium rounded-md transition-colors"
+                  class="relative px-2.5 py-1 text-xs font-medium rounded-md transition-colors"
                   :class="statusFilter === opt.value
                     ? 'bg-blue-600 text-white'
                     : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'"
-                >{{ opt.label }} <span class="opacity-60">{{ statusCounts[opt.value] }}</span></button>
+                >
+                  {{ opt.label }}
+                  <span class="opacity-60"> {{ statusCounts[opt.value] }}</span>
+                  <!-- Red dot on Overdue tab when there are overdue items and it's not selected -->
+                  <span
+                    v-if="opt.dot && statusCounts.overdue > 0 && statusFilter !== 'overdue'"
+                    class="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"
+                  />
+                </button>
               </div>
 
-              <div class="flex items-center gap-1">
+              <div class="flex items-center gap-1 shrink-0">
                 <select
                   v-model="sortBy"
                   class="px-2 py-1 text-xs text-gray-600 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -299,6 +336,33 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                   class="px-2 py-1 text-xs text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
                 >{{ sortDir === 'asc' ? '↑' : '↓' }}</button>
               </div>
+            </div>
+
+            <!-- Priority filter + clear -->
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex gap-1">
+                <button
+                  @click="priorityFilter = null"
+                  class="px-2.5 py-1 text-xs font-medium rounded-md transition-colors"
+                  :class="priorityFilter === null
+                    ? 'bg-gray-700 text-white'
+                    : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'"
+                >Any priority</button>
+                <button
+                  v-for="p in PRIORITIES"
+                  :key="p"
+                  @click="priorityFilter = p"
+                  class="px-2.5 py-1 text-xs font-medium rounded-md transition-colors"
+                  :class="priorityFilter === p
+                    ? priorityClasses[p] + ' ring-1 ring-inset ring-current'
+                    : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'"
+                >{{ p }}</button>
+              </div>
+              <button
+                v-if="filtersActive"
+                @click="clearFilters"
+                class="text-xs text-gray-400 hover:text-gray-600 transition-colors shrink-0"
+              >× Clear filters</button>
             </div>
           </div>
 
