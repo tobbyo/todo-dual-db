@@ -28,7 +28,9 @@ public static class TodoEndpoints
                 Title = dto.Title,
                 Description = dto.Description,
                 IsComplete = false,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                DueDate = dto.DueDate,
+                Priority = dto.Priority
             };
             db.Todos.Add(todo);
             await db.SaveChangesAsync();
@@ -48,10 +50,14 @@ public static class TodoEndpoints
             var beforeTitle = todo.Title;
             var beforeDescription = todo.Description;
             var beforeIsComplete = todo.IsComplete;
+            var beforeDueDate = todo.DueDate;
+            var beforePriority = todo.Priority;
 
             if (dto.Title is not null) todo.Title = dto.Title;
             if (dto.Description is not null) todo.Description = dto.Description;
             if (dto.IsComplete.HasValue) todo.IsComplete = dto.IsComplete.Value;
+            if (dto.DueDate.HasValue) todo.DueDate = dto.DueDate.Value;
+            if (dto.Priority is not null) todo.Priority = dto.Priority;
 
             await db.SaveChangesAsync();
 
@@ -61,7 +67,9 @@ public static class TodoEndpoints
                 Title = beforeTitle,
                 Description = beforeDescription,
                 IsComplete = beforeIsComplete,
-                CreatedAt = todo.CreatedAt
+                CreatedAt = todo.CreatedAt,
+                DueDate = beforeDueDate,
+                Priority = beforePriority
             };
             await activityLog.LogUpdatedAsync(before, todo);
 

@@ -24,7 +24,9 @@ public class ActivityLogService : IActivityLogService
             Details = new BsonDocument
             {
                 { "description", todo.Description != null ? BsonValue.Create(todo.Description) : BsonNull.Value },
-                { "isComplete", todo.IsComplete }
+                { "isComplete", todo.IsComplete },
+                { "dueDate", todo.DueDate.HasValue ? BsonValue.Create(todo.DueDate.Value) : BsonNull.Value },
+                { "priority", todo.Priority != null ? BsonValue.Create(todo.Priority) : BsonNull.Value }
             }
         };
         await _logs.InsertOneAsync(log);
@@ -33,7 +35,8 @@ public class ActivityLogService : IActivityLogService
     public async Task LogUpdatedAsync(Todo before, Todo after)
     {
         // Detect if this is specifically a Completed/Uncompleted action
-        if (before.IsComplete != after.IsComplete && before.Title == after.Title && before.Description == after.Description)
+        if (before.IsComplete != after.IsComplete && before.Title == after.Title && before.Description == after.Description
+            && before.DueDate == after.DueDate && before.Priority == after.Priority)
         {
             var log = new ActivityLog
             {
@@ -54,6 +57,10 @@ public class ActivityLogService : IActivityLogService
             changes.Add(new FieldChange { Field = "description", From = before.Description, To = after.Description });
         if (before.IsComplete != after.IsComplete)
             changes.Add(new FieldChange { Field = "isComplete", From = before.IsComplete.ToString(), To = after.IsComplete.ToString() });
+        if (before.DueDate != after.DueDate)
+            changes.Add(new FieldChange { Field = "dueDate", From = before.DueDate?.ToString("o"), To = after.DueDate?.ToString("o") });
+        if (before.Priority != after.Priority)
+            changes.Add(new FieldChange { Field = "priority", From = before.Priority, To = after.Priority });
 
         var updateLog = new ActivityLog
         {
@@ -80,7 +87,9 @@ public class ActivityLogService : IActivityLogService
                 { "title", todo.Title },
                 { "description", todo.Description != null ? BsonValue.Create(todo.Description) : BsonNull.Value },
                 { "isComplete", todo.IsComplete },
-                { "createdAt", todo.CreatedAt }
+                { "createdAt", todo.CreatedAt },
+                { "dueDate", todo.DueDate.HasValue ? BsonValue.Create(todo.DueDate.Value) : BsonNull.Value },
+                { "priority", todo.Priority != null ? BsonValue.Create(todo.Priority) : BsonNull.Value }
             }
         };
         await _logs.InsertOneAsync(log);

@@ -7,7 +7,9 @@ public class Todo
     public string? Description { get; set; }
     public bool IsComplete { get; set; }
     public DateTime CreatedAt { get; set; }
+    public DateTime? DueDate { get; set; }
+    public string? Priority { get; set; }  // null | "Low" | "Medium" | "High"
 }
 
-public record TodoCreateDto(string Title, string? Description);
-public record TodoUpdateDto(string? Title, string? Description, bool? IsComplete);
+public record TodoCreateDto(string Title, string? Description, DateTime? DueDate, string? Priority);
+public record TodoUpdateDto(string? Title, string? Description, bool? IsComplete, DateTime? DueDate, string? Priority);

@@ -1,28 +1,41 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import ActivityLog from './components/ActivityLog.vue'
-import { timeAgo } from './utils/timeAgo.js'
+import { timeAgo, formatDueDate } from './utils/timeAgo.js'
 
 const todos = ref([])
 const newTitle = ref('')
 const newDescription = ref('')
+const newDueDate = ref('')
+const newPriority = ref(null)
 const editingId = ref(null)
 const editTitle = ref('')
 const editDescription = ref('')
+const editDueDate = ref('')
+const editPriority = ref(null)
 const loading = ref(false)
 const sortBy = ref('createdAt')
 const sortDir = ref('desc')
+
+const PRIORITIES = ['Low', 'Medium', 'High']
 
 const sortOptions = [
   { value: 'createdAt', label: 'Date' },
   { value: 'title', label: 'Title' },
   { value: 'isComplete', label: 'Status' },
+  { value: 'dueDate', label: 'Due Date' },
 ]
 
 const sortedTodos = computed(() => {
   return [...todos.value].sort((a, b) => {
     let aVal = a[sortBy.value]
     let bVal = b[sortBy.value]
+
+    // Nulls last regardless of sort direction
+    if (aVal == null && bVal == null) return 0
+    if (aVal == null) return 1
+    if (bVal == null) return -1
+
     if (typeof aVal === 'string') {
       aVal = aVal.toLowerCase()
       bVal = (bVal || '').toLowerCase()
@@ -61,10 +74,17 @@ async function addTodo() {
   await fetch(API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: newTitle.value, description: newDescription.value || null })
+    body: JSON.stringify({
+      title: newTitle.value,
+      description: newDescription.value || null,
+      dueDate: newDueDate.value || null,
+      priority: newPriority.value || null
+    })
   })
   newTitle.value = ''
   newDescription.value = ''
+  newDueDate.value = ''
+  newPriority.value = null
   await fetchTodos()
   refreshActivityLog()
 }
@@ -89,6 +109,8 @@ function startEdit(todo) {
   editingId.value = todo.id
   editTitle.value = todo.title
   editDescription.value = todo.description || ''
+  editDueDate.value = todo.dueDate ? todo.dueDate.substring(0, 10) : ''
+  editPriority.value = todo.priority || null
 }
 
 function cancelEdit() {
@@ -99,7 +121,12 @@ async function saveEdit(id) {
   await fetch(`${API}/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: editTitle.value, description: editDescription.value || null })
+    body: JSON.stringify({
+      title: editTitle.value,
+      description: editDescription.value || null,
+      dueDate: editDueDate.value || null,
+      priority: editPriority.value || null
+    })
   })
   editingId.value = null
   await fetchTodos()
@@ -108,6 +135,12 @@ async function saveEdit(id) {
 
 function formatDate(dateStr) {
   return timeAgo(dateStr)
+}
+
+const priorityClasses = {
+  High: 'bg-red-100 text-red-700',
+  Medium: 'bg-amber-100 text-amber-700',
+  Low: 'bg-blue-100 text-blue-700',
 }
 
 onMounted(fetchTodos)
@@ -132,6 +165,29 @@ onMounted(fetchTodos)
           placeholder="Description (optional)"
           class="w-full mt-2 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         />
+        <div class="flex gap-3 mt-2">
+          <input
+            v-model="newDueDate"
+            type="date"
+            class="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+          <div class="flex gap-1 items-center">
+            <button
+              type="button"
+              @click="newPriority = null"
+              class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
+              :class="newPriority === null ? 'bg-gray-700 text-white' : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'"
+            >None</button>
+            <button
+              v-for="p in PRIORITIES"
+              :key="p"
+              type="button"
+              @click="newPriority = p"
+              class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
+              :class="newPriority === p ? priorityClasses[p] + ' ring-1 ring-inset ring-current' : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'"
+            >{{ p }}</button>
+          </div>
+        </div>
         <button
           type="submit"
           class="mt-3 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors"
@@ -187,16 +243,30 @@ onMounted(fetchTodos)
               class="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
             />
             <div class="flex-1 min-w-0">
-              <p
-                class="text-sm font-medium"
-                :class="todo.isComplete ? 'line-through text-gray-400' : 'text-gray-900'"
-              >
-                {{ todo.title }}
-              </p>
+              <div class="flex items-center gap-2 flex-wrap">
+                <p
+                  class="text-sm font-medium"
+                  :class="todo.isComplete ? 'line-through text-gray-400' : 'text-gray-900'"
+                >
+                  {{ todo.title }}
+                </p>
+                <span
+                  v-if="todo.priority"
+                  class="px-1.5 py-0.5 text-xs font-medium rounded"
+                  :class="priorityClasses[todo.priority]"
+                >{{ todo.priority }}</span>
+              </div>
               <p v-if="todo.description" class="text-sm text-gray-500 mt-0.5">
                 {{ todo.description }}
               </p>
-              <p class="text-xs text-gray-400 mt-1">{{ formatDate(todo.createdAt) }}</p>
+              <div class="flex items-center gap-3 mt-1 flex-wrap">
+                <p class="text-xs text-gray-400">{{ formatDate(todo.createdAt) }}</p>
+                <p
+                  v-if="todo.dueDate && formatDueDate(todo.dueDate, todo.isComplete)"
+                  class="text-xs"
+                  :class="formatDueDate(todo.dueDate, todo.isComplete).className"
+                >{{ formatDueDate(todo.dueDate, todo.isComplete).label }}</p>
+              </div>
             </div>
             <div class="flex gap-1">
               <button
@@ -227,6 +297,29 @@ onMounted(fetchTodos)
               placeholder="Description"
               class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
+            <div class="flex gap-3 flex-wrap">
+              <input
+                v-model="editDueDate"
+                type="date"
+                class="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <div class="flex gap-1 items-center">
+                <button
+                  type="button"
+                  @click="editPriority = null"
+                  class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
+                  :class="editPriority === null ? 'bg-gray-700 text-white' : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'"
+                >None</button>
+                <button
+                  v-for="p in PRIORITIES"
+                  :key="p"
+                  type="button"
+                  @click="editPriority = p"
+                  class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
+                  :class="editPriority === p ? priorityClasses[p] + ' ring-1 ring-inset ring-current' : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'"
+                >{{ p }}</button>
+              </div>
+            </div>
             <div class="flex gap-2">
               <button
                 @click="saveEdit(todo.id)"
