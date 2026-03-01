@@ -18,11 +18,23 @@ const editPriority = ref(null)
 const loading = ref(false)
 const searchQuery = ref('')
 const statusFilter = ref('all')
-const priorityFilter = ref(null)  // null | 'Low' | 'Medium' | 'High'
+const priorityFilter = ref(null)
 const showCompleted = ref(false)
-const deletingTodo = ref(null)  // { id, title } when modal is open
+const deletingTodo = ref(null)
 const sortBy = ref('sortOrder')
 const sortDir = ref('asc')
+
+// Dark mode — init from localStorage, fallback to system preference
+const isDark = ref(
+  localStorage.getItem('theme') === 'dark' ||
+  (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)
+)
+
+function toggleDark() {
+  isDark.value = !isDark.value
+  localStorage.setItem('theme', isDark.value ? 'dark' : 'light')
+  document.documentElement.classList.toggle('dark', isDark.value)
+}
 
 const PRIORITIES = ['Low', 'Medium', 'High']
 
@@ -95,13 +107,9 @@ const sortedTodos = computed(() => {
   })
 })
 
-// Split for "All" view — active up top, completed collapsible below
 const activeTodos = computed(() => sortedTodos.value.filter(t => !t.isComplete))
 const completedTodos = computed(() => sortedTodos.value.filter(t => t.isComplete))
 
-// Writable computed for vuedraggable
-// get: returns active todos in "All" view, full filtered list otherwise
-// set: persists new manual order when in manual sort + "All" mode
 const draggableActiveTodos = computed({
   get: () => statusFilter.value === 'all' ? activeTodos.value : sortedTodos.value,
   set: (reordered) => {
@@ -182,6 +190,12 @@ async function confirmDelete() {
   refreshActivityLog()
 }
 
+async function deleteTodo(id) {
+  await fetch(`${API}/${id}`, { method: 'DELETE' })
+  await fetchTodos()
+  refreshActivityLog()
+}
+
 function startEdit(todo) {
   editingId.value = todo.id
   editTitle.value = todo.title
@@ -211,9 +225,9 @@ async function saveEdit(id) {
 }
 
 const priorityClasses = {
-  High: 'bg-red-100 text-red-700',
-  Medium: 'bg-amber-100 text-amber-700',
-  Low: 'bg-blue-100 text-blue-700',
+  High: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400',
+  Medium: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400',
+  Low: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400',
 }
 
 const priorityBorderClasses = {
@@ -227,6 +241,7 @@ function onKeydown(e) {
 }
 
 onMounted(() => {
+  document.documentElement.classList.toggle('dark', isDark.value)
   fetchTodos()
   window.addEventListener('keydown', onKeydown)
 })
@@ -234,23 +249,43 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50">
+  <div class="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
     <div class="max-w-5xl mx-auto px-4 py-12">
-      <h1 class="text-3xl font-bold text-gray-900 mb-8">Todo List</h1>
+
+      <!-- Header -->
+      <div class="flex items-center justify-between mb-8">
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Todo List</h1>
+        <button
+          @click="toggleDark"
+          class="p-2 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+          :title="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
+        >
+          <!-- Sun (shown in dark mode) -->
+          <svg v-if="isDark" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707M17.657 17.657l-.707-.707M6.343 6.343l-.707-.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+          </svg>
+          <!-- Moon (shown in light mode) -->
+          <svg v-else class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+          </svg>
+        </button>
+      </div>
 
       <div class="lg:grid lg:grid-cols-[1fr_320px] lg:gap-8 lg:items-start">
 
-        <!-- Left column: form + controls + list -->
+        <!-- Left column -->
         <div>
 
           <!-- Add Todo Form -->
-          <form @submit.prevent="addTodo" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
+          <form @submit.prevent="addTodo" class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 mb-6">
             <div class="flex gap-2">
               <input
                 v-model="newTitle"
                 type="text"
                 placeholder="What needs to be done?"
-                class="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                class="flex-1 px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
               <button
                 type="submit"
@@ -263,61 +298,49 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                 v-model="newDescription"
                 type="text"
                 placeholder="Description (optional)"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                class="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
               <div class="flex gap-2 flex-wrap items-center">
                 <input
                   v-model="newDueDate"
                   type="date"
-                  class="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  class="px-3 py-1.5 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
                 <div class="flex gap-1">
-                  <button
-                    type="button"
-                    @click="newPriority = null"
+                  <button type="button" @click="newPriority = null"
                     class="px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors"
-                    :class="newPriority === null ? 'bg-gray-700 text-white' : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'"
+                    :class="newPriority === null ? 'bg-gray-700 dark:bg-gray-500 text-white' : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'"
                   >None</button>
-                  <button
-                    v-for="p in PRIORITIES"
-                    :key="p"
-                    type="button"
-                    @click="newPriority = p"
+                  <button v-for="p in PRIORITIES" :key="p" type="button" @click="newPriority = p"
                     class="px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors"
-                    :class="newPriority === p ? priorityClasses[p] + ' ring-1 ring-inset ring-current' : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'"
+                    :class="newPriority === p ? priorityClasses[p] + ' ring-1 ring-inset ring-current' : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'"
                   >{{ p }}</button>
                 </div>
               </div>
             </div>
 
-            <button
-              type="button"
-              @click="showNewDetails = !showNewDetails"
-              class="mt-2 text-xs text-gray-400 hover:text-gray-500 transition-colors"
+            <button type="button" @click="showNewDetails = !showNewDetails"
+              class="mt-2 text-xs text-gray-400 dark:text-gray-500 hover:text-gray-500 dark:hover:text-gray-400 transition-colors"
             >{{ showNewDetails ? '↑ Fewer options' : '+ More options' }}</button>
           </form>
 
           <!-- Controls: Search + Filter + Sort -->
           <div v-if="todos.length > 0" class="mb-5 space-y-2">
-            <!-- Search -->
             <div class="relative">
               <input
                 v-model="searchQuery"
                 type="text"
                 placeholder="Search todos..."
-                class="w-full pl-9 pr-8 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                class="w-full pl-9 pr-8 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
-              <svg class="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg class="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400 dark:text-gray-500 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
               </svg>
-              <button
-                v-if="searchQuery"
-                @click="searchQuery = ''"
-                class="absolute right-2.5 top-2 text-gray-400 hover:text-gray-600 text-sm leading-none p-0.5"
+              <button v-if="searchQuery" @click="searchQuery = ''"
+                class="absolute right-2.5 top-2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 text-sm leading-none p-0.5"
               >✕</button>
             </div>
 
-            <!-- Status filter + sort -->
             <div class="flex items-center justify-between gap-2">
               <div class="flex gap-1 flex-wrap">
                 <button
@@ -332,69 +355,54 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                   class="relative px-2.5 py-1 text-xs font-medium rounded-md transition-colors"
                   :class="statusFilter === opt.value
                     ? 'bg-blue-600 text-white'
-                    : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'"
+                    : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'"
                 >
-                  {{ opt.label }}
-                  <span class="opacity-60"> {{ statusCounts[opt.value] }}</span>
-                  <!-- Red dot on Overdue tab when there are overdue items and it's not selected -->
-                  <span
-                    v-if="opt.dot && statusCounts.overdue > 0 && statusFilter !== 'overdue'"
-                    class="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"
-                  />
+                  {{ opt.label }} <span class="opacity-60">{{ statusCounts[opt.value] }}</span>
+                  <span v-if="opt.dot && statusCounts.overdue > 0 && statusFilter !== 'overdue'"
+                    class="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"/>
                 </button>
               </div>
-
               <div class="flex items-center gap-1 shrink-0">
-                <select
-                  v-model="sortBy"
-                  class="px-2 py-1 text-xs text-gray-600 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                <select v-model="sortBy"
+                  class="px-2 py-1 text-xs text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
                 >
                   <option v-for="opt in sortOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
                 </select>
-                <button
-                  @click="toggleSortDir"
-                  class="px-2 py-1 text-xs text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                <button @click="toggleSortDir"
+                  class="px-2 py-1 text-xs text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                 >{{ sortDir === 'asc' ? '↑' : '↓' }}</button>
               </div>
             </div>
 
-            <!-- Priority filter + clear -->
             <div class="flex items-center justify-between gap-2">
               <div class="flex gap-1">
-                <button
-                  @click="priorityFilter = null"
+                <button @click="priorityFilter = null"
                   class="px-2.5 py-1 text-xs font-medium rounded-md transition-colors"
                   :class="priorityFilter === null
-                    ? 'bg-gray-700 text-white'
-                    : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'"
+                    ? 'bg-gray-700 dark:bg-gray-500 text-white'
+                    : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'"
                 >Any priority</button>
-                <button
-                  v-for="p in PRIORITIES"
-                  :key="p"
-                  @click="priorityFilter = p"
+                <button v-for="p in PRIORITIES" :key="p" @click="priorityFilter = p"
                   class="px-2.5 py-1 text-xs font-medium rounded-md transition-colors"
                   :class="priorityFilter === p
                     ? priorityClasses[p] + ' ring-1 ring-inset ring-current'
-                    : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'"
+                    : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'"
                 >{{ p }}</button>
               </div>
-              <button
-                v-if="filtersActive"
-                @click="clearFilters"
-                class="text-xs text-gray-400 hover:text-gray-600 transition-colors shrink-0"
+              <button v-if="filtersActive" @click="clearFilters"
+                class="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors shrink-0"
               >× Clear filters</button>
             </div>
           </div>
 
           <!-- States -->
-          <p v-if="loading" class="text-gray-500 text-center py-8">Loading...</p>
-          <p v-else-if="todos.length === 0" class="text-gray-400 text-center py-8">No todos yet. Add one above!</p>
-          <p v-else-if="sortedTodos.length === 0" class="text-gray-400 text-center py-8">No todos match your search.</p>
+          <p v-if="loading" class="text-gray-500 dark:text-gray-400 text-center py-8">Loading...</p>
+          <p v-else-if="todos.length === 0" class="text-gray-400 dark:text-gray-500 text-center py-8">No todos yet. Add one above!</p>
+          <p v-else-if="sortedTodos.length === 0" class="text-gray-400 dark:text-gray-500 text-center py-8">No todos match your search.</p>
 
           <!-- Todo list -->
           <template v-else>
 
-            <!-- Active (or filtered) todos -->
             <draggable
               v-model="draggableActiveTodos"
               item-key="id"
@@ -407,120 +415,129 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               <template #item="{ element: todo }">
               <li
                 :key="todo.id"
-                class="bg-white rounded-lg shadow-sm border border-gray-200 p-4"
+                class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4"
                 :class="todo.priority ? priorityBorderClasses[todo.priority] : ''"
               >
-                <!-- View mode -->
                 <div v-if="editingId !== todo.id" class="flex items-start gap-3">
-                  <!-- Drag handle -->
-                  <svg
-                    v-if="sortBy === 'sortOrder' && statusFilter === 'all'"
-                    class="drag-handle mt-0.5 h-4 w-4 shrink-0 cursor-grab text-gray-300 hover:text-gray-500 transition-colors active:cursor-grabbing"
+                  <svg v-if="sortBy === 'sortOrder' && statusFilter === 'all'"
+                    class="drag-handle mt-0.5 h-4 w-4 shrink-0 cursor-grab text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 transition-colors active:cursor-grabbing"
                     viewBox="0 0 20 20" fill="currentColor"
                   >
                     <circle cx="7" cy="4" r="1.5"/><circle cx="13" cy="4" r="1.5"/>
                     <circle cx="7" cy="10" r="1.5"/><circle cx="13" cy="10" r="1.5"/>
                     <circle cx="7" cy="16" r="1.5"/><circle cx="13" cy="16" r="1.5"/>
                   </svg>
-                  <input
-                    type="checkbox"
-                    :checked="todo.isComplete"
-                    @change="toggleComplete(todo)"
-                    class="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer shrink-0"
+                  <input type="checkbox" :checked="todo.isComplete" @change="toggleComplete(todo)"
+                    class="mt-0.5 h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 cursor-pointer shrink-0"
                   />
                   <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-2 flex-wrap">
-                      <p class="text-sm font-medium" :class="todo.isComplete ? 'line-through text-gray-400' : 'text-gray-900'">{{ todo.title }}</p>
+                      <p class="text-sm font-medium" :class="todo.isComplete ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-gray-100'">{{ todo.title }}</p>
                       <span v-if="todo.priority" class="px-1.5 py-0.5 text-xs font-medium rounded" :class="priorityClasses[todo.priority]">{{ todo.priority }}</span>
                     </div>
-                    <p v-if="todo.description" class="text-xs text-gray-500 mt-0.5">{{ todo.description }}</p>
+                    <p v-if="todo.description" class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{{ todo.description }}</p>
                     <div class="flex items-center gap-3 mt-1 flex-wrap text-xs">
-                      <span class="text-gray-400">{{ timeAgo(todo.createdAt) }}</span>
+                      <span class="text-gray-400 dark:text-gray-500">{{ timeAgo(todo.createdAt) }}</span>
                       <span v-if="todo.dueDate" :class="formatDueDate(todo.dueDate, todo.isComplete).className">{{ formatDueDate(todo.dueDate, todo.isComplete).label }}</span>
                     </div>
                   </div>
                   <div class="flex gap-1 shrink-0">
-                    <button @click="startEdit(todo)" class="px-2 py-1 text-xs text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors">Edit</button>
-                    <button @click="requestDelete(todo)" class="px-2 py-1 text-xs text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors">Delete</button>
+                    <button @click="startEdit(todo)" class="px-2 py-1 text-xs text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors">Edit</button>
+                    <button @click="requestDelete(todo)" class="px-2 py-1 text-xs text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors">Delete</button>
                   </div>
                 </div>
 
-                <!-- Edit mode -->
                 <div v-else class="space-y-2">
-                  <input v-model="editTitle" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-                  <input v-model="editDescription" type="text" placeholder="Description" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                  <input v-model="editTitle" type="text"
+                    class="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <input v-model="editDescription" type="text" placeholder="Description"
+                    class="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
                   <div class="flex gap-2 flex-wrap items-center">
-                    <input v-model="editDueDate" type="date" class="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                    <input v-model="editDueDate" type="date"
+                      class="px-3 py-1.5 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
                     <div class="flex gap-1">
-                      <button type="button" @click="editPriority = null" class="px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors" :class="editPriority === null ? 'bg-gray-700 text-white' : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'">None</button>
-                      <button v-for="p in PRIORITIES" :key="p" type="button" @click="editPriority = p" class="px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors" :class="editPriority === p ? priorityClasses[p] + ' ring-1 ring-inset ring-current' : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'">{{ p }}</button>
+                      <button type="button" @click="editPriority = null"
+                        class="px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors"
+                        :class="editPriority === null ? 'bg-gray-700 dark:bg-gray-500 text-white' : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'"
+                      >None</button>
+                      <button v-for="p in PRIORITIES" :key="p" type="button" @click="editPriority = p"
+                        class="px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors"
+                        :class="editPriority === p ? priorityClasses[p] + ' ring-1 ring-inset ring-current' : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'"
+                      >{{ p }}</button>
                     </div>
                   </div>
                   <div class="flex gap-2">
                     <button @click="saveEdit(todo.id)" class="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition-colors">Save</button>
-                    <button @click="cancelEdit" class="px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-medium rounded-md hover:bg-gray-200 transition-colors">Cancel</button>
+                    <button @click="cancelEdit" class="px-3 py-1.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs font-medium rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">Cancel</button>
                   </div>
                 </div>
               </li>
               </template>
             </draggable>
 
-            <!-- Completed todos — collapsible, only in "All" view -->
+            <!-- Completed todos — collapsible -->
             <template v-if="statusFilter === 'all' && completedTodos.length > 0">
-              <button
-                @click="showCompleted = !showCompleted"
-                class="mt-4 w-full flex items-center gap-3 py-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+              <button @click="showCompleted = !showCompleted"
+                class="mt-4 w-full flex items-center gap-3 py-1.5 text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
               >
                 <span class="shrink-0">{{ showCompleted ? '↑ Hide' : '↓ Show' }} {{ completedTodos.length }} completed</span>
-                <span class="flex-1 border-t border-gray-200"></span>
+                <span class="flex-1 border-t border-gray-200 dark:border-gray-700"></span>
               </button>
 
               <ul v-if="showCompleted" class="space-y-2 mt-2">
-                <li
-                  v-for="todo in completedTodos"
-                  :key="todo.id"
-                  class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 opacity-60"
+                <li v-for="todo in completedTodos" :key="todo.id"
+                  class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 opacity-60"
                   :class="todo.priority ? priorityBorderClasses[todo.priority] : ''"
                 >
-                  <!-- View mode -->
                   <div v-if="editingId !== todo.id" class="flex items-start gap-3">
-                    <input
-                      type="checkbox"
-                      :checked="todo.isComplete"
-                      @change="toggleComplete(todo)"
-                      class="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer shrink-0"
+                    <input type="checkbox" :checked="todo.isComplete" @change="toggleComplete(todo)"
+                      class="mt-0.5 h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 cursor-pointer shrink-0"
                     />
                     <div class="flex-1 min-w-0">
                       <div class="flex items-center gap-2 flex-wrap">
-                        <p class="text-sm font-medium line-through text-gray-400">{{ todo.title }}</p>
+                        <p class="text-sm font-medium line-through text-gray-400 dark:text-gray-500">{{ todo.title }}</p>
                         <span v-if="todo.priority" class="px-1.5 py-0.5 text-xs font-medium rounded" :class="priorityClasses[todo.priority]">{{ todo.priority }}</span>
                       </div>
-                      <p v-if="todo.description" class="text-xs text-gray-500 mt-0.5">{{ todo.description }}</p>
+                      <p v-if="todo.description" class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{{ todo.description }}</p>
                       <div class="flex items-center gap-3 mt-1 flex-wrap text-xs">
-                        <span class="text-gray-400">{{ timeAgo(todo.createdAt) }}</span>
+                        <span class="text-gray-400 dark:text-gray-500">{{ timeAgo(todo.createdAt) }}</span>
                         <span v-if="todo.dueDate" :class="formatDueDate(todo.dueDate, todo.isComplete).className">{{ formatDueDate(todo.dueDate, todo.isComplete).label }}</span>
                       </div>
                     </div>
                     <div class="flex gap-1 shrink-0">
-                      <button @click="startEdit(todo)" class="px-2 py-1 text-xs text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors">Edit</button>
-                      <button @click="requestDelete(todo)" class="px-2 py-1 text-xs text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors">Delete</button>
+                      <button @click="startEdit(todo)" class="px-2 py-1 text-xs text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors">Edit</button>
+                      <button @click="requestDelete(todo)" class="px-2 py-1 text-xs text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors">Delete</button>
                     </div>
                   </div>
 
-                  <!-- Edit mode -->
                   <div v-else class="space-y-2">
-                    <input v-model="editTitle" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-                    <input v-model="editDescription" type="text" placeholder="Description" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                    <input v-model="editTitle" type="text"
+                      class="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    <input v-model="editDescription" type="text" placeholder="Description"
+                      class="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
                     <div class="flex gap-2 flex-wrap items-center">
-                      <input v-model="editDueDate" type="date" class="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                      <input v-model="editDueDate" type="date"
+                        class="px-3 py-1.5 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
                       <div class="flex gap-1">
-                        <button type="button" @click="editPriority = null" class="px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors" :class="editPriority === null ? 'bg-gray-700 text-white' : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'">None</button>
-                        <button v-for="p in PRIORITIES" :key="p" type="button" @click="editPriority = p" class="px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors" :class="editPriority === p ? priorityClasses[p] + ' ring-1 ring-inset ring-current' : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'">{{ p }}</button>
+                        <button type="button" @click="editPriority = null"
+                          class="px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors"
+                          :class="editPriority === null ? 'bg-gray-700 dark:bg-gray-500 text-white' : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'"
+                        >None</button>
+                        <button v-for="p in PRIORITIES" :key="p" type="button" @click="editPriority = p"
+                          class="px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors"
+                          :class="editPriority === p ? priorityClasses[p] + ' ring-1 ring-inset ring-current' : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'"
+                        >{{ p }}</button>
                       </div>
                     </div>
                     <div class="flex gap-2">
                       <button @click="saveEdit(todo.id)" class="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition-colors">Save</button>
-                      <button @click="cancelEdit" class="px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-medium rounded-md hover:bg-gray-200 transition-colors">Cancel</button>
+                      <button @click="cancelEdit" class="px-3 py-1.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs font-medium rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">Cancel</button>
                     </div>
                   </div>
                 </li>
@@ -530,7 +547,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           </template>
         </div>
 
-        <!-- Right column: Activity Log (sticky sidebar on lg+) -->
+        <!-- Right column: Activity Log -->
         <aside class="mt-8 lg:mt-0 lg:sticky lg:top-6">
           <ActivityLog ref="activityLogRef" />
         </aside>
@@ -540,26 +557,18 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
     <!-- Delete confirmation modal -->
     <Teleport to="body">
-      <div
-        v-if="deletingTodo"
-        class="fixed inset-0 z-50 flex items-center justify-center"
-      >
-        <!-- Backdrop -->
-        <div class="absolute inset-0 bg-black/40" @click="cancelDelete" />
-
-        <!-- Dialog -->
-        <div class="relative bg-white rounded-lg shadow-xl border border-gray-200 p-6 w-full max-w-sm mx-4">
-          <h2 class="text-sm font-semibold text-gray-900 mb-1">Delete todo?</h2>
-          <p class="text-sm text-gray-500 mb-5">
-            "<span class="text-gray-700">{{ deletingTodo.title }}</span>" will be permanently removed.
+      <div v-if="deletingTodo" class="fixed inset-0 z-50 flex items-center justify-center">
+        <div class="absolute inset-0 bg-black/40 dark:bg-black/60" @click="cancelDelete" />
+        <div class="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 p-6 w-full max-w-sm mx-4">
+          <h2 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">Delete todo?</h2>
+          <p class="text-sm text-gray-500 dark:text-gray-400 mb-5">
+            "<span class="text-gray-700 dark:text-gray-200">{{ deletingTodo.title }}</span>" will be permanently removed.
           </p>
           <div class="flex justify-end gap-2">
-            <button
-              @click="cancelDelete"
-              class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+            <button @click="cancelDelete"
+              class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
             >Cancel</button>
-            <button
-              @click="confirmDelete"
+            <button @click="confirmDelete"
               class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition-colors"
             >Delete</button>
           </div>
