@@ -9,7 +9,9 @@ public class Todo
     public DateTime CreatedAt { get; set; }
     public DateTime? DueDate { get; set; }
     public string? Priority { get; set; }  // null | "Low" | "Medium" | "High"
+    public int SortOrder { get; set; }
 }
 
 public record TodoCreateDto(string Title, string? Description, DateTime? DueDate, string? Priority);
 public record TodoUpdateDto(string? Title, string? Description, bool? IsComplete, DateTime? DueDate, string? Priority);
+public record TodoReorderDto(int Id, int SortOrder);

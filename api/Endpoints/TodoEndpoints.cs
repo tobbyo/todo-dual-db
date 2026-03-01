@@ -11,7 +11,7 @@ public static class TodoEndpoints
     {
         // GET all todos
         app.MapGet("/api/todos", async (TodoDb db) =>
-            await db.Todos.OrderByDescending(t => t.CreatedAt).ToListAsync());
+            await db.Todos.OrderBy(t => t.SortOrder).ThenByDescending(t => t.CreatedAt).ToListAsync());
 
         // GET single todo
         app.MapGet("/api/todos/{id}", async (int id, TodoDb db) =>
@@ -23,6 +23,10 @@ public static class TodoEndpoints
         // CREATE todo
         app.MapPost("/api/todos", async (TodoCreateDto dto, TodoDb db, IActivityLogService activityLog) =>
         {
+            var maxOrder = await db.Todos.AnyAsync()
+                ? await db.Todos.MaxAsync(t => t.SortOrder)
+                : -1;
+
             var todo = new Todo
             {
                 Title = dto.Title,
@@ -30,7 +34,8 @@ public static class TodoEndpoints
                 IsComplete = false,
                 CreatedAt = DateTime.UtcNow,
                 DueDate = dto.DueDate,
-                Priority = dto.Priority
+                Priority = dto.Priority,
+                SortOrder = maxOrder + 1
             };
             db.Todos.Add(todo);
             await db.SaveChangesAsync();
@@ -74,6 +79,20 @@ public static class TodoEndpoints
             await activityLog.LogUpdatedAsync(before, todo);
 
             return Results.Ok(todo);
+        });
+
+        // REORDER todos
+        app.MapPut("/api/todos/reorder", async (List<TodoReorderDto> items, TodoDb db) =>
+        {
+            var ids = items.Select(i => i.Id).ToList();
+            var todos = await db.Todos.Where(t => ids.Contains(t.Id)).ToListAsync();
+            foreach (var item in items)
+            {
+                var todo = todos.FirstOrDefault(t => t.Id == item.Id);
+                if (todo is not null) todo.SortOrder = item.SortOrder;
+            }
+            await db.SaveChangesAsync();
+            return Results.NoContent();
         });
 
         // DELETE todo

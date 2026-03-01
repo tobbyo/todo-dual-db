@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import draggable from 'vuedraggable'
 import ActivityLog from './components/ActivityLog.vue'
 import { timeAgo, formatDueDate } from './utils/timeAgo.js'
 
@@ -20,12 +21,13 @@ const statusFilter = ref('all')
 const priorityFilter = ref(null)  // null | 'Low' | 'Medium' | 'High'
 const showCompleted = ref(false)
 const deletingTodo = ref(null)  // { id, title } when modal is open
-const sortBy = ref('createdAt')
-const sortDir = ref('desc')
+const sortBy = ref('sortOrder')
+const sortDir = ref('asc')
 
 const PRIORITIES = ['Low', 'Medium', 'High']
 
 const sortOptions = [
+  { value: 'sortOrder', label: 'Manual' },
   { value: 'createdAt', label: 'Date created' },
   { value: 'title', label: 'Title' },
   { value: 'isComplete', label: 'Status' },
@@ -96,6 +98,24 @@ const sortedTodos = computed(() => {
 // Split for "All" view — active up top, completed collapsible below
 const activeTodos = computed(() => sortedTodos.value.filter(t => !t.isComplete))
 const completedTodos = computed(() => sortedTodos.value.filter(t => t.isComplete))
+
+// Writable computed for vuedraggable
+// get: returns active todos in "All" view, full filtered list otherwise
+// set: persists new manual order when in manual sort + "All" mode
+const draggableActiveTodos = computed({
+  get: () => statusFilter.value === 'all' ? activeTodos.value : sortedTodos.value,
+  set: (reordered) => {
+    reordered.forEach((item, i) => {
+      const t = todos.value.find(x => x.id === item.id)
+      if (t) t.sortOrder = i
+    })
+    fetch(`${API}/reorder`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(reordered.map((t, i) => ({ id: t.id, sortOrder: i })))
+    })
+  }
+})
 
 function toggleSortDir() {
   sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
@@ -375,15 +395,33 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           <template v-else>
 
             <!-- Active (or filtered) todos -->
-            <ul class="space-y-2">
+            <draggable
+              v-model="draggableActiveTodos"
+              item-key="id"
+              handle=".drag-handle"
+              tag="ul"
+              class="space-y-2"
+              :animation="150"
+              :disabled="sortBy !== 'sortOrder' || statusFilter !== 'all'"
+            >
+              <template #item="{ element: todo }">
               <li
-                v-for="todo in (statusFilter === 'all' ? activeTodos : sortedTodos)"
                 :key="todo.id"
                 class="bg-white rounded-lg shadow-sm border border-gray-200 p-4"
                 :class="todo.priority ? priorityBorderClasses[todo.priority] : ''"
               >
                 <!-- View mode -->
                 <div v-if="editingId !== todo.id" class="flex items-start gap-3">
+                  <!-- Drag handle -->
+                  <svg
+                    v-if="sortBy === 'sortOrder' && statusFilter === 'all'"
+                    class="drag-handle mt-0.5 h-4 w-4 shrink-0 cursor-grab text-gray-300 hover:text-gray-500 transition-colors active:cursor-grabbing"
+                    viewBox="0 0 20 20" fill="currentColor"
+                  >
+                    <circle cx="7" cy="4" r="1.5"/><circle cx="13" cy="4" r="1.5"/>
+                    <circle cx="7" cy="10" r="1.5"/><circle cx="13" cy="10" r="1.5"/>
+                    <circle cx="7" cy="16" r="1.5"/><circle cx="13" cy="16" r="1.5"/>
+                  </svg>
                   <input
                     type="checkbox"
                     :checked="todo.isComplete"
@@ -424,7 +462,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                   </div>
                 </div>
               </li>
-            </ul>
+              </template>
+            </draggable>
 
             <!-- Completed todos — collapsible, only in "All" view -->
             <template v-if="statusFilter === 'all' && completedTodos.length > 0">
